@@ -1,0 +1,12 @@
+severity           = 4
+verbose            = %f:%l:%c: %m (%p)\n
+program-extensions = .t
+
+# Signatures are not prototypes.
+[-Subroutines::ProhibitSubroutinePrototypes]
+
+# PPI cannot parse Future::AsyncAwait's `async sub`, which hides the final 1;.
+[-Modules::RequireEndWithOne]
+
+# `use constant` is clearer than the Readonly module this policy suggests.
+[-ValuesAndExpressions::ProhibitConstantPragma]

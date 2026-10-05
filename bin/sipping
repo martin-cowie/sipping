@@ -1,0 +1,110 @@
+#!/usr/bin/env perl
+
+use v5.40;
+use FindBin ();
+use lib "$FindBin::RealBin/../lib", "$FindBin::RealBin/../local/lib/perl5";
+
+use Getopt::Long qw(GetOptionsFromArray);
+use IO::Async::Loop;
+use Net::Async::HTTP::Server::PSGI;
+use POSIX      qw(strftime);
+use Pod::Usage qw(pod2usage);
+
+use Sipping::API;
+use Sipping::Monitor;
+use Sipping::Prober;
+use Sipping::Target;
+
+exit main(@ARGV);
+
+sub main (@args) {
+    GetOptionsFromArray(\@args, \my %options, 'listen=s', 'timeout=f', 'interval=f', 'target=s@', 'help')
+        or pod2usage(2);
+    pod2usage(-verbose => 1, -exitval => 0) if $options{help};
+
+    my $listen = $options{listen} // '127.0.0.1:8080';
+    my ($host, $port) = $listen =~ m{\A\[?([^\]]+?)\]?:(\d+)\z}
+        or die "invalid --listen '$listen': expected host:port\n";
+
+    my $loop    = IO::Async::Loop->new;
+    my $monitor = Sipping::Monitor->new(
+        loop          => $loop,
+        prober        => Sipping::Prober->new(loop => $loop, _defined(timeout => $options{timeout})),
+        on_transition => \&_log_transition,
+    );
+    for my $spec (($options{target} // [])->@*) {
+        $monitor->add_target(Sipping::Target->from_spec($spec, _defined(interval => $options{interval})));
+    }
+
+    my $server = Net::Async::HTTP::Server::PSGI->new(app => Sipping::API->new(monitor => $monitor)->to_app);
+    $loop->add($server);
+    $server->listen(host => $host, service => $port, socktype => 'stream')->get;
+    _log("listening on http://$listen/");
+
+    $loop->attach_signal($_ => sub { $loop->stop }) for qw(INT TERM);
+    $loop->run;
+    _log('stopped');
+    return 0;
+}
+
+sub _defined ($name, $value) {
+    return defined $value ? ($name => $value) : ();
+}
+
+sub _log_transition ($previous, $current) {
+    my $detail = $current->is_up ? sprintf('%s %s', $current->code, $current->reason) : $current->reason;
+    _log(sprintf '%s is %s (%s)', $current->target_id, uc $current->state, $detail);
+    return;
+}
+
+sub _log ($message) {
+    say {*STDERR} strftime('%Y-%m-%dT%H:%M:%SZ', gmtime), " $message";
+    return;
+}
+
+__END__
+
+=head1 NAME
+
+sipping - monitor SIP endpoints with OPTIONS pings and serve their status over REST
+
+=head1 SYNOPSIS
+
+    sipping [--listen host:port] [--timeout seconds] [--interval seconds]
+            [--target [udp:|tcp:]host[:port]]...
+
+    sipping --target udp:pbx.example.com --target tcp:proxy.example.com:5060
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<--listen> I<host:port>
+
+Address for the REST API. Defaults to C<127.0.0.1:8080>.
+
+=item B<--timeout> I<seconds>
+
+How long to wait for a final response. Defaults to 2.
+
+=item B<--interval> I<seconds>
+
+Seconds between probes of each target given with B<--target>. Defaults to 30.
+
+=item B<--target> I<[udp:|tcp:]host[:port]>
+
+An endpoint to monitor from start-up; repeatable. Transport defaults to UDP and
+port to 5060. More can be added at runtime with C<POST /targets>.
+
+=item B<--help>
+
+Show this help.
+
+=back
+
+=head1 DESCRIPTION
+
+Logs each target's state changes to standard error and serves the REST API
+described in L<Sipping::API>. Stops cleanly on SIGINT or SIGTERM.
+
+=cut

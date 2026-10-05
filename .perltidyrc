@@ -1,0 +1,10 @@
+--maximum-line-length=110
+--indent-columns=4
+--continuation-indentation=4
+--paren-tightness=2
+--square-bracket-tightness=2
+--brace-tightness=2
+--nooutdent-long-quotes
+--nospace-for-semicolon
+--break-at-old-comma-breakpoints
+--character-encoding=utf8
