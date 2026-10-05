@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/martin-cowie/sipping/actions/workflows/ci.yml/badge.svg)](https://github.com/martin-cowie/sipping/actions/workflows/ci.yml)
 
-A SIP health monitor in modern Perl. It sends SIP `OPTIONS` requests to a set
+A SIP health monitor in Perl. It sends SIP `OPTIONS` requests to a set
 of endpoints on a schedule and reports each endpoint's state and round-trip
 time over a REST API and as Prometheus metrics.
 
